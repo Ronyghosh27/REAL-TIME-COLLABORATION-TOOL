@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Collab — Real-time Collaborative Editor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@400;600;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0f14;
+    --surface: #13161e;
+    --surface2: #1a1e28;
+    --surface3: #222736;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #e8eaf0;
+    --text2: #8890a4;
+    --text3: #555d72;
+    --accent: #6c8aff;
+    --accent2: #3d5cff;
+    --green: #3dffa0;
+    --amber: #ffc653;
+    --coral: #ff6b7a;
+    --teal: #2ee8cc;
+    --purple: #c084fc;
+    --font-code: 'JetBrains Mono', monospace;
+    --font-ui: 'Syne', sans-serif;
+    --r: 8px;
+    --r2: 12px;
+  }
+
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    font-family: var(--font-ui);
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    height: 52px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .logo-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.85); }
+  }
+
+  .doc-title-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 280px;
+    margin: 0 auto;
+  }
+
+  #doc-title {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid transparent;
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    font-weight: 600;
+    width: 100%;
+    padding: 4px 6px;
+    outline: none;
+    text-align: center;
+    transition: border-color 0.2s;
+  }
+
+  #doc-title:focus { border-color: var(--border2); }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+  }
+
+  .mode-switch {
+    display: flex;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 3px;
+    gap: 2px;
+  }
+
+  .mode-btn {
+    padding: 5px 12px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text2);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.3px;
+  }
+
+  .mode-btn.active { background: var(--accent2); color: white; }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 11px;
+    border-radius: 100px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text2);
+    font-weight: 500;
+  }
+
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 1.5s infinite;
+  }
+
+  .status-dot.offline { background: var(--coral); animation: none; }
+
+  .avatars { display: flex; align-items: center; }
+
+  .avatar {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+    border: 2px solid var(--bg);
+    margin-left: -6px;
+    cursor: default;
+    transition: transform 0.2s;
+  }
+
+  .avatar:first-child { margin-left: 0; }
+  .avatar:hover { transform: translateY(-2px); z-index: 10; position: relative; }
+
+  .share-btn {
+    padding: 7px 14px;
+    border-radius: var(--r);
+    background: var(--accent2);
+    border: none;
+    color: white;
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    transition: all 0.2s;
+  }
+
+  .share-btn:hover { background: var(--accent); transform: translateY(-1px); }
+
+  /* ── MAIN ── */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-section {
+    padding: 14px 14px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: var(--text3);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .user-list { display: flex; flex-direction: column; gap: 6px; }
+
+  .user-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 8px;
+    border-radius: var(--r);
+    transition: background 0.15s;
+  }
+
+  .user-item:hover { background: var(--surface2); }
+
+  .user-avatar-sm {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .user-info { flex: 1; min-width: 0; }
+  .user-name { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .user-status { font-size: 10px; color: var(--text3); }
+  .user-cursor-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+  .chat-section {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .chat-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: var(--text3);
+    text-transform: uppercase;
+    padding: 12px 14px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .chat-messages::-webkit-scrollbar { width: 4px; }
+  .chat-messages::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 4px; }
+
+  .chat-msg {
+    font-size: 12px;
+    line-height: 1.5;
+    animation: fadeUp 0.25s ease;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .chat-msg-name { font-weight: 700; margin-right: 5px; }
+  .chat-msg-text { color: var(--text2); }
+  .chat-msg-system { font-size: 11px; color: var(--text3); font-style: italic; }
+
+  .typing-indicator {
+    font-size: 11px;
+    color: var(--text3);
+    padding: 4px 12px;
+    font-style: italic;
+    min-height: 22px;
+  }
+
+  .chat-input-row {
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .chat-input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    padding: 7px 10px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .chat-input:focus { border-color: var(--accent); }
+
+  .chat-send {
+    padding: 7px 12px;
+    background: var(--accent2);
+    border: none;
+    border-radius: var(--r);
+    color: white;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .chat-send:hover { background: var(--accent); }
+
+  /* ── EDITOR ── */
+  .editor-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .tb-btn {
+    padding: 5px 9px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text2);
+    font-family: var(--font-code);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-weight: 600;
+  }
+
+  .tb-btn:hover { background: var(--surface2); color: var(--text); }
+
+  .tb-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+
+  .lang-select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    outline: none;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .editor-wrapper {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .line-numbers {
+    width: 44px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 16px 10px 16px 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    font-family: var(--font-code);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text3);
+    user-select: none;
+  }
+
+  .line-num { min-height: 20.8px; }
+
+  .editor-scroll { flex: 1; overflow: auto; position: relative; }
+  .editor-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+  .editor-scroll::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 4px; }
+
+  #editor {
+    width: 100%;
+    min-height: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: var(--font-code);
+    font-size: 13.5px;
+    line-height: 1.6;
+    padding: 16px 20px 80px;
+    resize: none;
+    caret-color: var(--accent);
+    tab-size: 2;
+    white-space: pre;
+    overflow-wrap: normal;
+    display: block;
+  }
+
+  #editor::selection { background: rgba(108,138,255,0.25); }
+
+  #notes-editor {
+    width: 100%;
+    min-height: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 15px;
+    line-height: 1.8;
+    padding: 32px 48px 80px;
+    resize: none;
+    caret-color: var(--accent);
+    display: none;
+  }
+
+  #notes-editor::selection { background: rgba(108,138,255,0.25); }
+
+  /* Remote cursor overlays */
+  .remote-cursor-line {
+    position: absolute;
+    pointer-events: none;
+    height: 2px;
+    border-radius: 1px;
+    left: 64px;
+    right: 20px;
+    opacity: 0.5;
+    transition: top 0.3s ease;
+    z-index: 5;
+  }
+
+  .remote-cursor-label {
+    position: absolute;
+    pointer-events: none;
+    font-size: 10px;
+    font-family: var(--font-ui);
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    left: 64px;
+    z-index: 6;
+    transition: top 0.3s ease;
+    white-space: nowrap;
+  }
+
+  /* ── BOTTOM BAR ── */
+  .bottom-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 16px;
+    height: 28px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text3);
+    font-family: var(--font-code);
+  }
+
+  .bottom-bar span b { color: var(--text2); font-weight: 500; }
+
+  /* ── TOASTS ── */
+  .toast-container {
+    position: fixed;
+    top: 60px;
+    right: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 999;
+    pointer-events: none;
+  }
+
+  .toast {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: var(--r2);
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s forwards;
+    max-width: 240px;
+  }
+
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  @keyframes toastOut {
+    to { opacity: 0; transform: translateX(20px); }
+  }
+
+  /* ── JOIN MODAL ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: var(--r2);
+    padding: 28px 28px 24px;
+    width: 340px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    animation: fadeUp 0.3s ease;
+  }
+
+  .modal-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    margin-bottom: -4px;
+  }
+
+  .modal-sub { font-size: 13px; color: var(--text2); }
+
+  .color-grid { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .color-swatch {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+
+  .color-swatch:hover,
+  .color-swatch.selected { transform: scale(1.15); border-color: white; }
+
+  .modal-input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    padding: 10px 14px;
+    outline: none;
+    width: 100%;
+    transition: border-color 0.2s;
+    font-weight: 500;
+  }
+
+  .modal-input:focus { border-color: var(--accent); }
+
+  .modal-join-btn {
+    padding: 12px;
+    background: var(--accent2);
+    border: none;
+    border-radius: var(--r);
+    color: white;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    transition: all 0.2s;
+  }
+
+  .modal-join-btn:hover { background: var(--accent); transform: translateY(-1px); }
+
+  .ws-info {
+    font-size: 11px;
+    color: var(--text3);
+    background: var(--surface2);
+    border-radius: var(--r);
+    padding: 8px 12px;
+    line-height: 1.6;
+  }
+
+  .ws-info b { color: var(--text2); }
+
+  * { scrollbar-width: thin; scrollbar-color: var(--surface3) transparent; }
+</style>
+</head>
+<body>
+
+<!-- JOIN MODAL -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-logo"><div class="logo-dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);"></div> Collab</div>
+    <div class="modal-sub">Real-time collaborative editor — open in multiple tabs or devices</div>
+    <input class="modal-input" id="name-input" placeholder="Your name..." maxlength="18" autofocus />
+    <div class="color-grid" id="color-grid"></div>
+    <div class="ws-info" id="ws-info">
+      <b>Sync mode:</b> BroadcastChannel (same browser tabs)<br>
+      For cross-device sync, run <b>server.js</b> and update WS_URL below.
+    </div>
+    <button class="modal-join-btn" id="join-btn">Join workspace</button>
+  </div>
+</div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo"><div class="logo-dot"></div> Collab</div>
+  <div class="doc-title-wrap">
+    <input id="doc-title" value="Untitled document" spellcheck="false" />
+  </div>
+  <div class="topbar-right">
+    <div class="mode-switch">
+      <button class="mode-btn active" id="mode-code" onclick="setMode('code')">Code</button>
+      <button class="mode-btn" id="mode-notes" onclick="setMode('notes')">Notes</button>
+    </div>
+    <div class="status-pill">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">Connecting...</span>
+    </div>
+    <div class="avatars" id="avatars-bar"></div>
+    <button class="share-btn" onclick="copyShareLink()">Share</button>
+  </div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Online now</div>
+      <div class="user-list" id="user-list"></div>
+    </div>
+    <div class="chat-section">
+      <div class="chat-label">Team chat</div>
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="typing-indicator" id="typing-indicator"></div>
+      <div class="chat-input-row">
+        <input class="chat-input" id="chat-input" placeholder="Message..." maxlength="200" />
+        <button class="chat-send" id="chat-send-btn" title="Send">↑</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDITOR AREA -->
+  <div class="editor-area">
+
+    <!-- CODE TOOLBAR -->
+    <div class="toolbar" id="code-toolbar">
+      <select class="lang-select" id="lang-select">
+        <option>JavaScript</option>
+        <option>Python</option>
+        <option>TypeScript</option>
+        <option>HTML</option>
+        <option>CSS</option>
+        <option>Rust</option>
+        <option>Go</option>
+        <option>SQL</option>
+        <option>Bash</option>
+        <option>JSON</option>
+      </select>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="insertSnippet('function')">fn</button>
+      <button class="tb-btn" onclick="insertSnippet('arrow')">()=></button>
+      <button class="tb-btn" onclick="insertSnippet('class')">class</button>
+      <button class="tb-btn" onclick="insertSnippet('async')">async</button>
+      <button class="tb-btn" onclick="insertSnippet('try')">try</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="insertSnippet('comment')">/* */</button>
+      <button class="tb-btn" onclick="insertSnippet('todo')">TODO</button>
+      <button class="tb-btn" onclick="insertSnippet('console')">log</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="clearEditor()">Clear</button>
+    </div>
+
+    <!-- NOTES TOOLBAR -->
+    <div class="toolbar" id="notes-toolbar" style="display:none;">
+      <button class="tb-btn" onclick="noteInsert('# ')">H1</button>
+      <button class="tb-btn" onclick="noteInsert('## ')">H2</button>
+      <button class="tb-btn" onclick="noteInsert('### ')">H3</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="noteWrap('**','**')"><b>Bold</b></button>
+      <button class="tb-btn" onclick="noteWrap('*','*')"><i>Italic</i></button>
+      <button class="tb-btn" onclick="noteWrap('`','`')">Code</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="noteInsert('- ')">• List</button>
+      <button class="tb-btn" onclick="noteInsert('1. ')">1. List</button>
+      <button class="tb-btn" onclick="noteInsert('> ')">Quote</button>
+      <button class="tb-btn" onclick="noteInsert('---\n')">Rule</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="noteInsert('- [ ] ')">☐ Task</button>
+      <button class="tb-btn" onclick="clearEditor()">Clear</button>
+    </div>
+
+    <div class="editor-wrapper">
+      <div class="line-numbers" id="line-numbers"></div>
+      <div class="editor-scroll" id="editor-scroll">
+        <textarea id="editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+        <textarea id="notes-editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+        <div id="cursor-overlays" style="position:absolute;inset:0;pointer-events:none;"></div>
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <span>Ln <b id="stat-line">1</b>, Col <b id="stat-col">1</b></span>
+      <span><b id="stat-chars">0</b> chars</span>
+      <span><b id="stat-lines">1</b> lines</span>
+      <span id="stat-lang">JavaScript</span>
+      <span style="margin-left:auto;" id="sync-status" style="color:var(--green)">◌ idle</span>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  CONFIGURATION
+//  To use WebSocket server: set WS_URL to your server address
+//  e.g. 'ws://localhost:3001' or 'wss://your-domain.com'
+//  Leave as null to use BroadcastChannel (same-browser tabs)
+// ═══════════════════════════════════════════════════════
+const WS_URL = 'ws://localhost:3001'; // e.g. 'ws://localhost:3001'
+
+const USER_COLORS = [
+  '#6c8aff','#3dffa0','#ffc653','#ff6b7a','#2ee8cc',
+  '#c084fc','#f97316','#06b6d4','#84cc16','#ec4899'
+];
+
+const DEFAULT_CODE = `// Welcome to Collab — Real-time Collaborative Editor
+// Open this page in another tab to see live collaboration!
+
+function greet(name) {
+  return \`Hello, \${name}! Welcome to the session.\`;
+}
+
+const team = ['Alice', 'Bob', 'Charlie'];
+const messages = team.map(u => greet(u));
+console.log(messages);
+
+// WebSocket-powered collaboration class
+class CollabSession {
+  constructor(roomId) {
+    this.roomId  = roomId;
+    this.users   = new Map();
+    this.version = 0;
+  }
+
+  join(user) {
+    this.users.set(user.id, user);
+    this.broadcast({ type: 'join', user });
+    this.version++;
+  }
+
+  leave(userId) {
+    const user = this.users.get(userId);
+    this.users.delete(userId);
+    if (user) this.broadcast({ type: 'leave', user });
+  }
+
+  broadcast(event) {
+    this.users.forEach(u => {
+      if (u.socket?.readyState === WebSocket.OPEN) {
+        u.socket.send(JSON.stringify(event));
+      }
+    });
+  }
+}
+
+const session = new CollabSession('room-001');
+`;
+
+const DEFAULT_NOTES = `# Welcome to Collab Notes ✦
+
+Open this page in **another tab** to collaborate in real-time!
+
+---
+
+## Getting started
+
+- Type anything here and your teammates see it instantly
+- Use the toolbar above to format your notes
+- Chat with your team in the sidebar on the left
+
+## Keyboard shortcuts
+
+- **Tab** — indent (in Code mode)
+- **Enter** — send chat message
+- Switch between **Code** and **Notes** modes in the top bar
+
+---
+
+## Features
+
+- Real-time sync via WebSocket / BroadcastChannel
+- Live cursor tracking per user
+- Team chat with typing indicators
+- Code editor with language selector
+- Markdown-style notes editor
+
+> Tip: Run server.js for cross-device collaboration over the network!
+`;
+
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+let me = null;
+let myId = 'u_' + Math.random().toString(36).slice(2, 9);
+let users = {};
+let mode = 'code';
+let channel = null;   // BroadcastChannel
+let socket  = null;   // WebSocket
+let typingTimer = null;
+let isTyping = false;
+let syncTimer = null;
+let typingUsersMap = {};
+
+// ═══════════════════════════════════════════════════════
+//  COLOR SWATCHES IN MODAL
+// ═══════════════════════════════════════════════════════
+let selectedColor = USER_COLORS[0];
+const colorGrid = document.getElementById('color-grid');
+USER_COLORS.forEach((c, i) => {
+  const sw = document.createElement('div');
+  sw.className = 'color-swatch' + (i === 0 ? ' selected' : '');
+  sw.style.background = c;
+  sw.onclick = () => {
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+    sw.classList.add('selected');
+    selectedColor = c;
+  };
+  colorGrid.appendChild(sw);
+});
+
+// ═══════════════════════════════════════════════════════
+//  TRANSPORT LAYER
+// ═══════════════════════════════════════════════════════
+function initTransport() {
+  if (WS_URL) {
+    initWebSocket();
+  } else {
+    initBroadcastChannel();
+    setStatus(true, 'Live (tabs)');
+  }
+}
+
+function initWebSocket() {
+  try {
+    socket = new WebSocket(WS_URL);
+    socket.onopen = () => {
+      setStatus(true, 'Connected');
+      send('join');
+    };
+    socket.onmessage = e => {
+      try { handleMessage(JSON.parse(e.data)); } catch(_) {}
+    };
+    socket.onclose = () => {
+      setStatus(false, 'Disconnected');
+      setTimeout(initWebSocket, 3000); // auto-reconnect
+    };
+    socket.onerror = () => setStatus(false, 'Error');
+  } catch(e) {
+    console.error('WebSocket error:', e);
+    initBroadcastChannel();
+  }
+}
+
+function initBroadcastChannel() {
+  try {
+    channel = new BroadcastChannel('collab_editor_v2');
+    channel.onmessage = e => handleMessage(e.data);
+  } catch(e) {
+    console.warn('BroadcastChannel not available');
+  }
+}
+
+function send(type, data = {}) {
+  if (!me) return;
+  const msg = { type, from: myId, user: me, ts: Date.now(), ...data };
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify(msg));
+  } else if (channel) {
+    try { channel.postMessage(msg); } catch(_) {}
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  MESSAGE HANDLER
+// ═══════════════════════════════════════════════════════
+function handleMessage(msg) {
+  if (!msg || msg.from === myId) return;
+  switch (msg.type) {
+    case 'join':
+      addUser(msg.from, msg.user);
+      send('presence', { content: getContent(), title: document.getElementById('doc-title').value, mode });
+      showToast(`${msg.user.name} joined`);
+      appendSystemChat(`${msg.user.name} joined the session`);
+      break;
+    case 'presence':
+      addUser(msg.from, msg.user);
+      if (msg.content !== undefined) setContent(msg.content, false);
+      if (msg.title) document.getElementById('doc-title').value = msg.title;
+      if (msg.mode && msg.mode !== mode) setMode(msg.mode, false);
+      break;
+    case 'leave':
+      removeUser(msg.from);
+      showToast(`${msg.user?.name} left`);
+      appendSystemChat(`${msg.user?.name} left the session`);
+      break;
+    case 'content':
+      addUser(msg.from, msg.user);
+      if (msg.content !== undefined) setContent(msg.content, false);
+      break;
+    case 'cursor':
+      addUser(msg.from, msg.user);
+      updateRemoteCursor(msg.from, msg.user, msg.line, msg.col);
+      break;
+    case 'chat':
+      addUser(msg.from, msg.user);
+      appendChat(msg.user, msg.text);
+      break;
+    case 'typing':
+      addUser(msg.from, msg.user);
+      handleTypingIndicator(msg.user.name, msg.isTyping);
+      break;
+    case 'title':
+      document.getElementById('doc-title').value = msg.title || '';
+      break;
+    case 'mode':
+      if (msg.mode !== mode) setMode(msg.mode, false);
+      break;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  USERS
+// ═══════════════════════════════════════════════════════
+function addUser(id, user) {
+  users[id] = { ...user, id };
+  renderUsers();
+}
+
+function removeUser(id) {
+  delete users[id];
+  ['cursor_','cursorlbl_'].forEach(prefix => {
+    const el = document.getElementById(prefix + id);
+    if (el) el.remove();
+  });
+  renderUsers();
+}
+
+function renderUsers() {
+  const all = [{ id: myId, ...me }, ...Object.values(users)];
+
+  document.getElementById('user-list').innerHTML = all.map(u => `
+    <div class="user-item">
+      <div class="user-avatar-sm" style="background:${u.color}22;color:${u.color}">${initials(u.name)}</div>
+      <div class="user-info">
+        <div class="user-name">${esc(u.name)}${u.id === myId ? ' <span style="color:var(--text3);font-weight:400">(you)</span>' : ''}</div>
+        <div class="user-status">${u.id === myId ? 'editing' : 'active'}</div>
+      </div>
+      <div class="user-cursor-dot" style="background:${u.color}"></div>
+    </div>
+  `).join('');
+
+  document.getElementById('avatars-bar').innerHTML = all.slice(0, 6).map(u => `
+    <div class="avatar" style="background:${u.color}33;color:${u.color}" title="${esc(u.name)}">${initials(u.name)}</div>
+  `).join('');
+
+  const count = all.length;
+  if (!WS_URL) {
+    setStatus(true, `${count} live (tabs)`);
+  } else {
+    setStatus(true, `${count} online`);
+  }
+}
+
+function initials(name) {
+  return (name || '?').slice(0, 2).toUpperCase();
+}
+
+// ═══════════════════════════════════════════════════════
+//  STATUS
+// ═══════════════════════════════════════════════════════
+function setStatus(online, label) {
+  const dot = document.getElementById('status-dot');
+  dot.className = 'status-dot' + (online ? '' : ' offline');
+  document.getElementById('status-text').textContent = label;
+}
+
+// ═══════════════════════════════════════════════════════
+//  CONTENT
+// ═══════════════════════════════════════════════════════
+function getContent() {
+  return (mode === 'code'
+    ? document.getElementById('editor')
+    : document.getElementById('notes-editor')
+  ).value;
+}
+
+function setContent(content, broadcast = true) {
+  const ed = mode === 'code'
+    ? document.getElementById('editor')
+    : document.getElementById('notes-editor');
+  const pos = ed.selectionStart;
+  ed.value = content;
+  try { ed.setSelectionRange(pos, pos); } catch(_) {}
+  updateLineNumbers();
+  updateStats();
+  if (broadcast) send('content', { content });
+}
+
+// ═══════════════════════════════════════════════════════
+//  REMOTE CURSORS
+// ═══════════════════════════════════════════════════════
+function updateRemoteCursor(id, user, line) {
+  const lineH = 20.8;
+  const top = 16 + (line - 1) * lineH;
+  const overlays = document.getElementById('cursor-overlays');
+
+  let el = document.getElementById('cursor_' + id);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'cursor_' + id;
+    el.className = 'remote-cursor-line';
+    overlays.appendChild(el);
+  }
+  el.style.background = user.color;
+  el.style.top = top + 'px';
+
+  let lbl = document.getElementById('cursorlbl_' + id);
+  if (!lbl) {
+    lbl = document.createElement('div');
+    lbl.id = 'cursorlbl_' + id;
+    lbl.className = 'remote-cursor-label';
+    overlays.appendChild(lbl);
+  }
+  lbl.style.background = user.color + '22';
+  lbl.style.color = user.color;
+  lbl.style.border = '1px solid ' + user.color + '55';
+  lbl.style.top = (top - 18) + 'px';
+  lbl.textContent = user.name;
+}
+
+// ═══════════════════════════════════════════════════════
+//  LINE NUMBERS
+// ═══════════════════════════════════════════════════════
+function updateLineNumbers() {
+  if (mode !== 'code') {
+    document.getElementById('line-numbers').innerHTML = '';
+    return;
+  }
+  const lines = document.getElementById('editor').value.split('\n').length;
+  document.getElementById('line-numbers').innerHTML =
+    Array.from({ length: lines }, (_, i) => `<div class="line-num">${i + 1}</div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  STATS
+// ═══════════════════════════════════════════════════════
+function updateStats() {
+  const ed = mode === 'code'
+    ? document.getElementById('editor')
+    : document.getElementById('notes-editor');
+  const val = ed.value;
+  const pos = ed.selectionStart;
+  const before = val.slice(0, pos);
+  const curLine = before.split('\n').length;
+  const curCol  = before.split('\n').pop().length + 1;
+  document.getElementById('stat-line').textContent = curLine;
+  document.getElementById('stat-col').textContent  = curCol;
+  document.getElementById('stat-chars').textContent = val.length;
+  document.getElementById('stat-lines').textContent = val.split('\n').length;
+}
+
+// ═══════════════════════════════════════════════════════
+//  CHAT
+// ═══════════════════════════════════════════════════════
+function appendChat(user, text) {
+  const el = document.createElement('div');
+  el.className = 'chat-msg';
+  el.innerHTML = `<span class="chat-msg-name" style="color:${user.color}">${esc(user.name)}:</span><span class="chat-msg-text"> ${esc(text)}</span>`;
+  const c = document.getElementById('chat-messages');
+  c.appendChild(el);
+  c.scrollTop = c.scrollHeight;
+}
+
+function appendSystemChat(text) {
+  const el = document.createElement('div');
+  el.className = 'chat-msg';
+  el.innerHTML = `<span class="chat-msg-system">— ${esc(text)}</span>`;
+  const c = document.getElementById('chat-messages');
+  c.appendChild(el);
+  c.scrollTop = c.scrollHeight;
+}
+
+function handleTypingIndicator(name, active) {
+  if (active) typingUsersMap[name] = true;
+  else delete typingUsersMap[name];
+  const names = Object.keys(typingUsersMap);
+  const el = document.getElementById('typing-indicator');
+  el.textContent = names.length === 0 ? ''
+    : names.length === 1 ? `${names[0]} is typing...`
+    : `${names.join(', ')} are typing...`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  MODE SWITCH
+// ═══════════════════════════════════════════════════════
+function setMode(m, broadcast = true) {
+  mode = m;
+  const isCode = m === 'code';
+  document.getElementById('editor').style.display         = isCode ? 'block' : 'none';
+  document.getElementById('notes-editor').style.display  = isCode ? 'none'  : 'block';
+  document.getElementById('line-numbers').style.display  = isCode ? 'flex'  : 'none';
+  document.getElementById('code-toolbar').style.display  = isCode ? 'flex'  : 'none';
+  document.getElementById('notes-toolbar').style.display = isCode ? 'none'  : 'flex';
+  document.getElementById('mode-code').classList.toggle('active',  isCode);
+  document.getElementById('mode-notes').classList.toggle('active', !isCode);
+  document.getElementById('stat-lang').textContent = isCode
+    ? document.getElementById('lang-select').value
+    : 'Markdown';
+  updateLineNumbers();
+  updateStats();
+  if (broadcast) send('mode', { mode: m });
+}
+
+// ═══════════════════════════════════════════════════════
+//  SNIPPETS
+// ═══════════════════════════════════════════════════════
+const SNIPPETS = {
+  function: 'function myFunction(params) {\n  \n}\n',
+  arrow:    'const myFunc = (params) => {\n  \n};\n',
+  class:    'class MyClass {\n  constructor() {\n    \n  }\n\n  method() {\n    \n  }\n}\n',
+  async:    'async function fetchData(url) {\n  try {\n    const res = await fetch(url);\n    return await res.json();\n  } catch (err) {\n    console.error(err);\n  }\n}\n',
+  try:      'try {\n  \n} catch (err) {\n  console.error(err);\n} finally {\n  \n}\n',
+  comment:  '/**\n * Description\n * @param {type} name - description\n * @returns {type}\n */\n',
+  todo:     '// TODO: ',
+  console:  'console.log();\n',
+};
+
+function insertSnippet(key) {
+  const ed = document.getElementById('editor');
+  const snippet = SNIPPETS[key] || '';
+  const pos = ed.selectionStart;
+  ed.value = ed.value.slice(0, pos) + snippet + ed.value.slice(ed.selectionEnd);
+  ed.focus();
+  const newPos = pos + snippet.indexOf('\n  \n') + 3 || pos + snippet.length;
+  ed.setSelectionRange(newPos, newPos);
+  updateLineNumbers();
+  updateStats();
+  send('content', { content: ed.value });
+}
+
+function noteInsert(prefix) {
+  const ed = document.getElementById('notes-editor');
+  const pos = ed.selectionStart;
+  const lineStart = ed.value.lastIndexOf('\n', pos - 1) + 1;
+  ed.value = ed.value.slice(0, lineStart) + prefix + ed.value.slice(lineStart);
+  ed.focus();
+  const newPos = lineStart + prefix.length + (pos - lineStart);
+  ed.setSelectionRange(newPos, newPos);
+  send('content', { content: ed.value });
+}
+
+function noteWrap(before, after) {
+  const ed = document.getElementById('notes-editor');
+  const start = ed.selectionStart;
+  const end   = ed.selectionEnd;
+  const sel   = ed.value.slice(start, end) || 'text';
+  ed.value = ed.value.slice(0, start) + before + sel + after + ed.value.slice(end);
+  ed.focus();
+  ed.setSelectionRange(start + before.length, start + before.length + sel.length);
+  send('content', { content: ed.value });
+}
+
+function clearEditor() {
+  if (!confirm('Clear the document for everyone?')) return;
+  setContent('', true);
+}
+
+// ═══════════════════════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════════════════════
+function showToast(text) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = text;
+  document.getElementById('toast-container').appendChild(t);
+  setTimeout(() => t.remove(), 3200);
+}
+
+function copyShareLink() {
+  navigator.clipboard?.writeText(location.href).catch(() => {});
+  showToast('Link copied! Open in another tab to collaborate.');
+}
+
+// ═══════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ═══════════════════════════════════════════════════════
+//  JOIN
+// ═══════════════════════════════════════════════════════
+document.getElementById('join-btn').onclick = () => {
+  const name = document.getElementById('name-input').value.trim() || 'Anonymous';
+  me = { name, color: selectedColor };
+  document.getElementById('modal-overlay').style.display = 'none';
+
+  // Set initial content
+  document.getElementById('editor').value = DEFAULT_CODE;
+  document.getElementById('notes-editor').value = DEFAULT_NOTES;
+  updateLineNumbers();
+  updateStats();
+
+  initTransport();
+  renderUsers();
+  showToast(`Welcome, ${name}!`);
+
+  // Editor input handler
+  const onInput = (ed) => {
+    updateLineNumbers();
+    updateStats();
+    clearTimeout(syncTimer);
+    document.getElementById('sync-status').textContent = '↑ syncing...';
+    syncTimer = setTimeout(() => {
+      send('content', { content: ed.value });
+      document.getElementById('sync-status').textContent = '✓ synced';
+    }, 120);
+  };
+
+  // Cursor handler
+  const onCursor = (ed) => {
+    const pos    = ed.selectionStart;
+    const before = ed.value.slice(0, pos);
+    const line   = before.split('\n').length;
+    const col    = before.split('\n').pop().length + 1;
+    send('cursor', { line, col });
+    updateStats();
+  };
+
+  const codeEd  = document.getElementById('editor');
+  const notesEd = document.getElementById('notes-editor');
+
+  codeEd.addEventListener('input',  () => onInput(codeEd));
+  codeEd.addEventListener('click',  () => onCursor(codeEd));
+  codeEd.addEventListener('keyup',  () => onCursor(codeEd));
+
+  notesEd.addEventListener('input', () => onInput(notesEd));
+  notesEd.addEventListener('click', () => onCursor(notesEd));
+  notesEd.addEventListener('keyup', () => onCursor(notesEd));
+
+  // Tab key in code editor
+  codeEd.addEventListener('keydown', e => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const pos    = codeEd.selectionStart;
+      const before = codeEd.value.slice(0, pos);
+      const after  = codeEd.value.slice(codeEd.selectionEnd);
+      codeEd.value = before + '  ' + after;
+      codeEd.setSelectionRange(pos + 2, pos + 2);
+      onInput(codeEd);
+    }
+  });
+
+  // Chat typing indicator
+  document.getElementById('chat-input').addEventListener('input', () => {
+    if (!isTyping) { isTyping = true; send('typing', { isTyping: true }); }
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => {
+      isTyping = false;
+      send('typing', { isTyping: false });
+    }, 1500);
+  });
+
+  // Chat send
+  const doSend = () => {
+    const text = document.getElementById('chat-input').value.trim();
+    if (!text) return;
+    document.getElementById('chat-input').value = '';
+    appendChat(me, text);
+    send('chat', { text });
+    isTyping = false;
+    send('typing', { isTyping: false });
+    clearTimeout(typingTimer);
+  };
+
+  document.getElementById('chat-send-btn').onclick = doSend;
+  document.getElementById('chat-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doSend();
+  });
+
+  // Title sync
+  document.getElementById('doc-title').addEventListener('input', e => {
+    send('title', { title: e.target.value });
+  });
+
+  // Language select
+  document.getElementById('lang-select').addEventListener('change', e => {
+    document.getElementById('stat-lang').textContent = e.target.value;
+  });
+
+  // Cleanup
+  window.addEventListener('beforeunload', () => {
+    send('leave');
+    if (socket) socket.close();
+    if (channel) channel.close();
+  });
+
+  codeEd.focus();
+};
+
+document.getElementById('name-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('join-btn').click();
+});
+</script>
+</body>
+</html>
