@@ -117,3 +117,6 @@ Each room has its own independent session.
 ```bash
 PORT=8080 node server.js
 ```
+## OUTPUT
+
+<img width="1907" height="956" alt="Image" src="https://github.com/user-attachments/assets/4cf022c0-b90b-4eed-9130-db98721a18df" />
